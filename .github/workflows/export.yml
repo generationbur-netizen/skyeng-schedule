@@ -1,0 +1,55 @@
+name: Skyeng Schedule Export
+
+on:
+  schedule:
+    - cron: '0 5 * * *'
+  workflow_dispatch:
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests beautifulsoup4 icalendar pytz
+
+      - name: Run Skyeng exporter
+        env:
+          SKYENG_EMAIL: ${{ secrets.SKYENG_EMAIL }}
+          SKYENG_PASSWORD: ${{ secrets.SKYENG_PASSWORD }}
+        run: |
+          python skyeng_export.py
+
+      - name: Commit and push calendar
+        run: |
+          git config user.name "Skyeng Calendar Bot"
+          git config user.email "bot@skyeng-calendar.local"
+
+          if git diff --quiet skyeng_schedule.ics; then
+            echo "✅ Calendar up to date, no changes"
+          else
+            echo "📝 Calendar changed, committing..."
+            git add skyeng_schedule.ics
+            git commit -m "🗓️ Update Skyeng schedule ($(date -u+'%Y-%m-%d %H:%M UTC'))"
+            git push
+          fi
+
+      - name: Notify success
+        if: success()
+        run: echo "✅ Skyeng calendar exported successfully!"
+
+      - name: Notify failure
+        if: failure()
+        run: echo "❌ Failed to export Skyeng calendar"
